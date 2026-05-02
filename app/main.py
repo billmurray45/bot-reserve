@@ -84,10 +84,8 @@ async def catalog(request: Request, show_prices: bool = True):
             "show_prices": show_prices,
             "contact": {
                 "name": "АЙЗАТ УНЕРХАНОВ",
-                "company": "ИП УНЕРХАНОВ А.",
                 "phone": "+7 702 358 2718",
-                "telegram": "@kuroff",
-                "email": "kuroff@mail.ru",
+                "email": "aunerkhanov@mail.ru",
             },
             "generated_at": date.today().isoformat(),
         },

@@ -441,7 +441,8 @@
 
             <div class="hero-contacts mono">
               <div style="color: var(--hazard); font-weight: 900; margin-bottom: 2mm;">[ ОТДЕЛ ПРОДАЖ ]</div>
-              <div style="font-size: 13pt; font-weight: 900; color: var(--ink); white-space: nowrap;">{{ contact.name }}</div>
+              <div style="font-size: 13pt; font-weight: 900; color: var(--ink); white-space: nowrap;">{{ contact.name }}
+              </div>
               <div style="font-size: 13pt; font-weight: 900; color: var(--ink); margin-top: 1mm; white-space: nowrap;">
                 WHATSAPP: {{ contact.phone }}</div>
             </div>
@@ -512,7 +513,8 @@
             </table>
             {% if show_prices %}
             <div class="prod-footer">
-              <div class="price-val">{{ product.price | int if product.price == product.price | int else product.price }} ₸<span class="price-unit mono">{{ product.price_unit }}</span></div>
+              <div class="price-val">{{ product.price | int if product.price == product.price | int else product.price
+                }} ₸<span class="price-unit mono">{{ product.price_unit }}</span></div>
             </div>
             {% endif %}
           </div>
@@ -542,11 +544,10 @@
           <div class="info-block">
             <div class="info-label mono">ОТДЕЛ ПРОДАЖ</div>
             <div class="info-val mono">{{ contact.name }}</div>
-            <div class="info-val mono" style="font-size: 8pt; color: var(--text-muted);">{{ contact.company }}</div>
           </div>
 
           <div class="info-block">
-            <div class="info-label mono">TELECOM / WHATSAPP</div>
+            <div class="info-label mono">WHATSAPP</div>
             <div class="info-val mono">{{ contact.phone }}</div>
           </div>
 
@@ -555,10 +556,6 @@
             <div class="info-val mono">{{ contact.email }}</div>
           </div>
 
-          <div class="info-block" style="flex:1;">
-            <div class="info-label mono">TELEGRAM NETWORK</div>
-            <div class="info-val mono">{{ contact.telegram }}</div>
-          </div>
         </div>
 
         <div class="info-col">
@@ -569,7 +566,7 @@
               <div class="del-num">01</div>
               <div>
                 <div class="del-title mono">МИНИМАЛЬНАЯ ОТГРУЗКА</div>
-                <div class="del-desc mono">ОТ 100 КГ ПО ОДНОЙ ПОЗИЦИИ ИЛИ ОТ 300 КГ СУММАРНОГО ВЕСА.</div>
+                <div class="del-desc mono">ОТ ОДНОЙ КОРОБКИ.</div>
               </div>
             </div>
           </div>
