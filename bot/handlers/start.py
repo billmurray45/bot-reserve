@@ -11,7 +11,7 @@ router = Router()
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     await message.answer(
-        "Добро пожаловать в KUR OFF管理!\nВыберите действие:",
+        "Добро пожаловать в KUR OFF Bot!\nВыберите действие:",
         reply_markup=main_menu,
     )
 
