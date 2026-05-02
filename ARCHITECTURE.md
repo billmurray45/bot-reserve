@@ -1,11 +1,11 @@
 # KUR OFF — Архитектура проекта
 
 ## Стек
-- **Backend**: FastAPI + SQLAlchemy async + SQLite (aiosqlite)
+- **Backend**: FastAPI + SQLAlchemy async + PostgreSQL (asyncpg)
 - **Bot**: Aiogram 3.x + FSM (MemoryStorage)
 - **Шаблоны**: Jinja2 (server-side render каталога)
 - **PDF**: Playwright (Chromium headless)
-- **Деплой**: VPS/Linux + systemd
+- **Деплой**: Docker Compose (PostgreSQL + App в одном compose)
 
 ---
 
@@ -14,14 +14,14 @@
 ```
 kuroff-catalog/
 ├── app/
-│   ├── main.py                # FastAPI app, монтирует роутеры + StaticFiles
-│   ├── config.py              # Settings: BOT_TOKEN, ALLOWED_USER_IDS, DB_PATH, BASE_URL
-│   ├── database.py            # Async engine, сессии, Base, init_db()
+│   ├── main.py                # FastAPI app, монтирует роутеры + StaticFiles, build_pages()
+│   ├── config.py              # Pydantic Settings: DATABASE_URL, BOT_TOKEN, ALLOWED_USER_IDS, BASE_URL
+│   ├── database.py            # Async engine, AsyncSessionLocal, Base, init_db()
 │   │
 │   ├── models/
-│   │   ├── category.py        # ORM модель Category
-│   │   ├── product.py         # ORM модель Product
-│   │   └── spec.py            # ORM модель ProductSpec
+│   │   ├── category.py        # ORM: Category (id, name, slug, sort_order)
+│   │   ├── product.py         # ORM: Product (id, category_id, title, description, price, price_unit, image_path, icon_name, sort_order, is_active)
+│   │   └── spec.py            # ORM: ProductSpec (id, product_id, label, value, sort_order)
 │   │
 │   ├── schemas/
 │   │   ├── category.py        # Pydantic: CategoryCreate / CategoryOut / CategoryUpdate
@@ -29,47 +29,53 @@ kuroff-catalog/
 │   │
 │   ├── crud/
 │   │   ├── category.py        # Async DB операции для категорий
-│   │   └── product.py         # Async DB операции для товаров + характеристик
+│   │   └── product.py         # Async DB операции для товаров + характеристик, set_image(), remove_image()
 │   │
 │   ├── api/
-│   │   ├── router.py          # Объединяет все APIRouter
+│   │   ├── router.py          # Объединяет все APIRouter под /api
 │   │   ├── categories.py      # /api/categories CRUD
-│   │   └── products.py        # /api/products CRUD + загрузка фото
+│   │   └── products.py        # /api/products CRUD + загрузка фото (Pillow compression)
 │   │
 │   ├── templates/
-│   │   └── catalog.html       # Jinja2-версия catalog.html (данные из БД)
+│   │   └── catalog.html       # Jinja2 A4 каталог, поддерживает ?show_prices=false
 │   │
 │   └── static/
-│       └── images/            # Загруженные фото товаров/категорий
+│       └── images/            # Загруженные фото товаров (UUID имена, сжатые через Pillow)
 │
 ├── bot/
-│   ├── main.py                # Aiogram bot + dispatcher
-│   ├── middlewares.py         # Auth: проверка user_id по allowlist
+│   ├── main.py                # Aiogram Bot + Dispatcher + AuthMiddleware
+│   ├── middlewares.py         # AuthMiddleware: проверка user_id по ALLOWED_USER_IDS
 │   │
 │   ├── handlers/
-│   │   ├── start.py           # /start, /help, главное меню
-│   │   ├── category.py        # Управление категориями
-│   │   └── product.py         # Управление товарами (FSM)
+│   │   ├── start.py           # /start, главное меню, генерация PDF (с ценами / без цен)
+│   │   ├── category.py        # Управление категориями (список / добавить / переименовать / удалить)
+│   │   └── product.py         # Управление товарами (FSM + быстрые операции)
 │   │
 │   ├── states/
-│   │   ├── product_states.py  # FSM состояния ProductForm
-│   │   └── category_states.py # FSM состояния CategoryForm
+│   │   ├── product_states.py  # ProductForm (8 состояний) + ProductQuick (price, photo)
+│   │   └── category_states.py # CategoryForm (waiting_name)
 │   │
 │   ├── keyboards/
-│   │   ├── main_menu.py       # ReplyKeyboard: Категории | Товары | Сгенерировать PDF
+│   │   ├── main_menu.py       # ReplyKeyboard: Товары | Категории | PDF с ценами | PDF без цен
 │   │   ├── category_kb.py     # Inline клавиатуры для категорий
-│   │   └── product_kb.py      # Inline клавиатуры для товаров + пагинация
+│   │   └── product_kb.py      # Inline клавиатуры для товаров + пагинация (PAGE_SIZE=5)
 │   │
 │   └── services/
-│       ├── api_client.py      # httpx AsyncClient → вызывает FastAPI
-│       └── pdf_generator.py   # Playwright: /catalog → PDF bytes → бот отправляет файл
+│       ├── api_client.py      # httpx AsyncClient → вызывает FastAPI на localhost:8000
+│       └── pdf_generator.py   # Playwright: /catalog → PDF bytes, поддерживает show_prices param
+│
+├── migrations/                # Alembic async миграции
+│   ├── env.py                 # Читает DATABASE_URL из settings, async режим
+│   └── versions/              # Файлы миграций
 │
 ├── runner.py                  # asyncio.gather(uvicorn, bot polling) — одна точка запуска
+├── seed.py                    # Первичное заполнение БД (4 категории)
 ├── requirements.txt
-├── .env                       # BOT_TOKEN, ALLOWED_USER_IDS, BASE_URL
-├── kuroff.db                  # SQLite (создаётся при первом запуске)
-└── systemd/
-    └── kuroff.service         # systemd unit для автостарта на VPS
+├── Dockerfile                 # Python 3.12-slim + Playwright Chromium deps
+├── docker-compose.yml         # Сервисы: db (PostgreSQL 16) + app
+├── alembic.ini
+├── .env                       # Локальные секреты (не в git)
+└── .env.example               # Шаблон переменных окружения
 ```
 
 ---
@@ -80,9 +86,8 @@ kuroff-catalog/
 | Поле | Тип | Описание |
 |------|-----|----------|
 | id | INTEGER PK | |
-| name | TEXT | "КУРИНАЯ ПРОДУКЦИЯ" |
-| slug | TEXT UNIQUE | "chicken" |
-| icon_path | TEXT NULL | "images/chicken.png" |
+| name | TEXT | "ПТИЦА" |
+| slug | TEXT UNIQUE | "ptitsa" |
 | sort_order | INTEGER | порядок отображения |
 | created_at | DATETIME | |
 
@@ -90,25 +95,25 @@ kuroff-catalog/
 | Поле | Тип | Описание |
 |------|-----|----------|
 | id | INTEGER PK | |
-| category_id | INTEGER FK | → categories.id CASCADE |
+| category_id | INTEGER FK | → categories.id ON DELETE CASCADE |
 | title | TEXT | "ТУШКА КУРИНАЯ" (всегда заглавные) |
 | description | TEXT | |
 | price | REAL | |
 | price_unit | TEXT | "/ КГ" по умолчанию |
-| image_path | TEXT NULL | локальный файл в /static/images/ |
+| image_path | TEXT NULL | UUID файл в /static/images/ |
 | icon_name | TEXT NULL | phosphor icon: "ph-fish-simple" |
 | sort_order | INTEGER | |
 | is_active | BOOLEAN | скрыть без удаления |
 | created_at / updated_at | DATETIME | |
 
-*Заполнено ровно одно из `image_path` / `icon_name`.*
+*Заполнено одно из `image_path` / `icon_name`, либо ни одно.*
 
 ### ProductSpec
 | Поле | Тип | Описание |
 |------|-----|----------|
 | id | INTEGER PK | |
-| product_id | INTEGER FK | → products.id CASCADE |
-| label | TEXT | "[ ВЕС ]" |
+| product_id | INTEGER FK | → products.id ON DELETE CASCADE |
+| label | TEXT | "ВЕС" |
 | value | TEXT | "1.6–2.2 КГ" |
 | sort_order | INTEGER | |
 
@@ -119,7 +124,7 @@ kuroff-catalog/
 | Метод | Путь | Описание |
 |-------|------|----------|
 | GET | `/` | Редирект → `/catalog` |
-| GET | `/catalog` | Jinja2 HTML каталог (A4, print-ready) |
+| GET | `/catalog?show_prices=true` | Jinja2 HTML каталог (A4, print-ready) |
 | GET | `/api/categories` | Список категорий |
 | POST | `/api/categories` | Создать категорию |
 | PATCH | `/api/categories/{id}` | Обновить категорию |
@@ -129,130 +134,104 @@ kuroff-catalog/
 | GET | `/api/products/{id}` | Один товар с характеристиками |
 | PATCH | `/api/products/{id}` | Обновить поля товара |
 | DELETE | `/api/products/{id}` | Удалить товар |
-| POST | `/api/products/{id}/image` | Загрузить фото (multipart) |
+| POST | `/api/products/{id}/image` | Загрузить фото (multipart, Pillow сжатие max 800px) |
 | DELETE | `/api/products/{id}/image` | Удалить фото |
 | GET | `/static/images/{filename}` | Отдать загруженное изображение |
 
 ---
 
-## Бот — сценарии (FSM)
+## Бот — сценарии
 
 ### Auth
-`middlewares.py` проверяет `user_id` по `ALLOWED_USER_IDS`. Чужие — тихий ignore.
+`AuthMiddleware` проверяет `user_id` по `ALLOWED_USER_IDS`. Чужие — тихий ignore.
 
 ### Главное меню (`/start`)
 ```
-[ Категории ]  [ Товары ]  [ Сгенерировать PDF ]
+[ 📦 Товары ]      [ 🗂 Категории ]
+[ 📄 PDF с ценами ] [ 📄 PDF без цен ]
 ```
-- **Сгенерировать PDF** → Playwright рендерит `/catalog` → бот отправляет `.pdf` файл в чат
 
 ### FSM: CategoryForm
 ```
-waiting_name → waiting_icon
+waiting_name
 ```
-Название → фото иконки (или "пропустить") → POST /api/categories
+Название → POST /api/categories (создать) или PATCH /api/categories/{id} (переименовать)
 
 ### FSM: ProductForm
 ```
-waiting_category → waiting_title → waiting_description →
-waiting_specs → waiting_price → waiting_price_unit →
-waiting_image → confirm
+waiting_title → waiting_description → waiting_specs →
+waiting_price → waiting_price_unit → waiting_image → confirm
 ```
-- Характеристики: пользователь шлёт строки `МЕТКА: ЗНАЧЕНИЕ`, накапливает до "готово"
+- Категория выбирается через inline кнопку до старта FSM
+- Характеристики: строки `МЕТКА: ЗНАЧЕНИЕ`, накапливаются до "готово"
 - Фото: загрузка фото ИЛИ текст иконки ИЛИ "пропустить"
-- Экран подтверждения: сводка + [Сохранить] [Отмена]
-- Редактирование: тот же FSM, данные подгружаются из GET /api/products/{id}, шлёт PATCH
+- Confirm: сводка + [Сохранить] [Отмена]
+- Редактирование: тот же FSM, данные из GET /api/products/{id}, шлёт PATCH
 
-### Быстрые операции (без полного FSM)
-- **[Цена]** → один промпт → PATCH price
-- **[Фото]** → загрузка фото → POST image
-- **[Скрыть/Показать]** → PATCH is_active
-
----
-
-## Интеграция каталога
-
-`catalog.html` → `app/templates/catalog.html` (Jinja2):
-
-```jinja2
-{% for category in categories %}
-<div class="page">
-  {% for product in category.products if product.is_active %}
-  <div class="prod-block">
-    {% if product.image_path %}
-      <img src="/static/{{ product.image_path }}">
-    {% else %}
-      <i class="ph-light {{ product.icon_name }}"></i>
-    {% endif %}
-    <h3>{{ product.title }}</h3>
-    <div class="prod-desc">{{ product.description }}</div>
-    <table>
-      {% for spec in product.specs %}
-      <tr><td>{{ spec.label }}</td><td>{{ spec.value }}</td></tr>
-      {% endfor %}
-    </table>
-    <div class="price">{{ product.price }} ₸<span>{{ product.price_unit }}</span></div>
-  </div>
-  {% endfor %}
-</div>
-{% endfor %}
-```
-
-`window.print()` убран — PDF генерирует Playwright.
+### Быстрые операции
+- **[Цена]** → `ProductQuick.waiting_price` → один промпт → PATCH price
+- **[Фото]** → `ProductQuick.waiting_photo` → загрузка → POST image
+- **[Скрыть/Показать]** → PATCH is_active (без FSM)
 
 ---
 
-## PDF генерация (`bot/services/pdf_generator.py`)
+## Пагинация каталога
 
-1. Playwright запускает Chromium (headless)
-2. Открывает `http://localhost:8000/catalog`
-3. Ждёт `networkidle` (загрузка шрифтов)
+`build_pages()` в `app/main.py` делит товары на страницы:
+- Максимум 3 товара на странице (`PRODUCTS_PER_PAGE = 3`)
+- Новая категория всегда начинается с новой страницы
+- Страница с 1-2 товарами получает закрывающую линию снизу
+- Фиксированная высота карточки: `91mm`
+
+---
+
+## PDF генерация
+
+`bot/services/pdf_generator.py`:
+1. Playwright запускает Chromium headless
+2. Открывает `http://localhost:8000/catalog` (или `?show_prices=false`)
+3. Ждёт `networkidle`
 4. `page.pdf(format="A4", print_background=True)` → bytes
-5. Бот: `send_document(chat_id, BufferedInputFile(pdf_bytes, "kuroff-catalog.pdf"))`
+5. Бот отправляет `BufferedInputFile` в чат
 
 ---
 
-## Деплой (VPS)
+## Деплой через Docker Compose
 
-### Первый запуск
 ```bash
-pip install -r requirements.txt
-playwright install chromium
-cp .env.example .env        # вписать BOT_TOKEN, ALLOWED_USER_IDS, BASE_URL
-python runner.py             # создаёт kuroff.db, сидит 2 категории + 6 товаров
+# Первый запуск
+cp .env.example .env          # вписать секреты
+docker compose up --build -d
+
+# Миграции (один раз)
+docker compose exec app alembic upgrade head
+
+# Seed (один раз, опционально)
+docker compose exec app python seed.py
 ```
 
-### runner.py
-```python
-async def main():
-    await init_db()          # создать таблицы + seed если БД пустая
-    server = uvicorn.Server(Config("app.main:app", host="0.0.0.0", port=8000))
-    await asyncio.gather(
-        server.serve(),
-        dp.start_polling(bot),
-    )
-```
+### Контейнеры
+| Сервис | Образ | Порт |
+|--------|-------|------|
+| db | postgres:16-alpine | ${DB_PORT}:5432 |
+| app | ./Dockerfile | 8000:8000 |
 
-### Автостарт (systemd)
-```bash
-sudo systemctl enable kuroff
-sudo systemctl start kuroff
-```
+- `app` зависит от `db` (healthcheck)
+- `DATABASE_URL` внутри контейнера использует хост `db` (задан в compose `environment`)
+- `app/static/images` смонтирован как volume — фото сохраняются между пересборками
 
 ---
 
-## Зависимости
+## Переменные окружения (.env)
 
-```
-fastapi
-uvicorn[standard]
-sqlalchemy[asyncio]
-aiosqlite
-aiogram>=3.0
-httpx
-jinja2
-aiofiles
-python-multipart
-playwright
-python-dotenv
+```env
+DB_NAME=kuroff_db
+DB_USER=kuroff_admin
+DB_PASSWORD=...
+DB_PORT=5432
+DATABASE_URL=postgresql+asyncpg://...@localhost:5432/kuroff_db  # для локального alembic
+BOT_TOKEN=...
+ALLOWED_USER_IDS=[123456789]
+BASE_URL=http://localhost:8000
+STATIC_DIR=app/static
 ```
